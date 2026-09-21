@@ -3,6 +3,20 @@ import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from flask import Flask
+import threading
+import os
+
+# ================== إعداد خادم Flask ==================
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 # ================== الإعدادات ==================
 TELEGRAM_TOKEN = "8993436999:AAFA3SeyZrbVlHlZ3Ffzy0dR7ZJHEsZezpg"
@@ -120,4 +134,7 @@ def main():
             time.sleep(60)
 
 if __name__ == "__main__":
+    # تشغيل Flask في خيط منفصل
+    threading.Thread(target=run_flask, daemon=True).start()
+    # تشغيل البوت
     main()
