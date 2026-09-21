@@ -21,19 +21,29 @@ def run_flask():
 # ================== الإعدادات ==================
 TELEGRAM_TOKEN = "8993436999:AAFA3SeyZrbVlHlZ3Ffzy0dR7ZJHEsZezpg"
 TELEGRAM_CHAT_ID = "-1004300703660"
+TWELVE_DATA_API_KEY = "8542361c42e84dd68468a39366ca04a1"
 
-SYMBOL = "XAUUSD"
-TIMEFRAME = "30m"
+SYMBOL = "XAU/USD"
+TIMEFRAME = "30min"
 
-# ================== دوال جلب البيانات ==================
+# ================== جلب البيانات الحقيقية ==================
 def get_data():
-    data = {
-        'close': np.random.rand(100) * 2000 + 1000,
-        'high': np.random.rand(100) * 2000 + 1000,
-        'low': np.random.rand(100) * 2000 + 1000,
-    }
-    df = pd.DataFrame(data)
-    return df
+    url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL}&interval={TIMEFRAME}&outputsize=200&apikey={TWELVE_DATA_API_KEY}"
+    try:
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        if 'values' not in data:
+            print(f"خطأ في جلب البيانات: {data.get('message', 'خطأ غير معروف')}")
+            return None
+        df = pd.DataFrame(data['values'])
+        df['close'] = df['close'].astype(float)
+        df['high'] = df['high'].astype(float)
+        df['low'] = df['low'].astype(float)
+        df = df.iloc[::-1].reset_index(drop=True)
+        return df
+    except Exception as e:
+        print(f"خطأ في الاتصال: {e}")
+        return None
 
 # ================== المؤشرات ==================
 def calculate_ema(df, period):
@@ -84,6 +94,10 @@ def main():
     while True:
         try:
             df = get_data()
+            if df is None or len(df) < 200:
+                print("لا توجد بيانات كافية، إعادة المحاولة بعد دقيقة...")
+                time.sleep(60)
+                continue
             
             ema_50 = calculate_ema(df, 50)
             ema_200 = calculate_ema(df, 200)
@@ -126,6 +140,8 @@ def main():
                 sl = round(entry + (last_atr * 1.5), 2)
                 tp = round(entry - (last_atr * 3), 2)
                 send_signal("بيع (SELL)", entry, sl, tp, confidence)
+            else:
+                print(f"لا توجد إشارة حالياً. السعر: {last_close} | RSI: {last_rsi:.2f}")
             
             time.sleep(1800)
         
@@ -134,7 +150,5 @@ def main():
             time.sleep(60)
 
 if __name__ == "__main__":
-    # تشغيل Flask في خيط منفصل
     threading.Thread(target=run_flask, daemon=True).start()
-    # تشغيل البوت
     main()
