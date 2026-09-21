@@ -26,6 +26,7 @@ TWELVE_DATA_API_KEY = "8542361c42e84dd68468a39366ca04a1"
 SYMBOL_TWELVE = "XAU/USD"
 SYMBOL_BINANCE = "XAUUSDT"
 TIMEFRAME = "15min"
+MIN_TIME_BETWEEN_SIGNALS = 900  # 15 دقيقة
 
 # ================== جلب البيانات من Twelve Data ==================
 def get_data_twelve():
@@ -91,7 +92,7 @@ def is_clean_candle(df):
     if total_range == 0:
         return False
     body_ratio = body / total_range
-    return body_ratio > 0.5  # الشمعة نظيفة إذا كان جسمها أكثر من 50% من مداها
+    return body_ratio > 0.4
 
 # ================== إرسال التوصية ==================
 def send_signal(direction, entry, sl, tp, confidence):
@@ -137,7 +138,7 @@ def main():
             price_binance = df_binance['close'].iloc[-1]
             price_diff = abs(price_twelve - price_binance) / price_twelve * 100
             
-            if price_diff > 1.0:  # فرق أكثر من 1%
+            if price_diff > 1.0:
                 print(f"فرق كبير بين المصدرين: {price_diff:.2f}% - تجاهل الإشارة")
                 time.sleep(900)
                 continue
@@ -166,29 +167,32 @@ def main():
                 time.sleep(900)
                 continue
             
-            # شروط الشراء
+            # شروط الشراء (مخففة)
             buy_conditions = [
                 last_close > last_ema200,
                 last_close > last_ema50,
-                40 < last_rsi < 65,
-                last_atr > 1.5,
+                30 < last_rsi < 70,
+                last_atr > 1.0,
             ]
             
-            # شروط البيع
+            # شروط البيع (مخففة)
             sell_conditions = [
                 last_close < last_ema200,
                 last_close < last_ema50,
-                35 < last_rsi < 60,
-                last_atr > 1.5,
+                30 < last_rsi < 70,
+                last_atr > 1.0,
             ]
             
             buy_score = sum(buy_conditions)
             sell_score = sum(sell_conditions)
             
+            # طباعة تشخيصية
+            print(f"السعر: {last_close:.2f} | RSI: {last_rsi:.2f} | ATR: {last_atr:.2f} | شراء: {buy_score}/4 | بيع: {sell_score}/4")
+            
             current_time = time.time()
             time_since_last = current_time - last_signal_time
             
-            if buy_score >= 3 and time_since_last >= 1800:
+            if buy_score >= 2 and time_since_last >= MIN_TIME_BETWEEN_SIGNALS:
                 confidence = int((buy_score / 4) * 100)
                 entry = round(last_close, 2)
                 sl = round(entry - (last_atr * 1.5), 2)
@@ -196,7 +200,7 @@ def main():
                 send_signal("شراء (BUY)", entry, sl, tp, confidence)
                 last_signal_time = current_time
             
-            elif sell_score >= 3 and time_since_last >= 1800:
+            elif sell_score >= 2 and time_since_last >= MIN_TIME_BETWEEN_SIGNALS:
                 confidence = int((sell_score / 4) * 100)
                 entry = round(last_close, 2)
                 sl = round(entry + (last_atr * 1.5), 2)
@@ -204,7 +208,7 @@ def main():
                 send_signal("بيع (SELL)", entry, sl, tp, confidence)
                 last_signal_time = current_time
             else:
-                print(f"لا إشارة. السعر: {last_close} | RSI: {last_rsi:.2f} | ATR: {last_atr:.2f}")
+                print("لا إشارة حالياً.")
             
             time.sleep(900)  # كل 15 دقيقة
         
