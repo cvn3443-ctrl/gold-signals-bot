@@ -30,6 +30,7 @@ MIN_TIME_BETWEEN_SIGNALS = 900  # 15 دقيقة
 
 # ================== جلب البيانات من Twelve Data ==================
 def get_data_twelve():
+    print("=== جاري جلب البيانات من Twelve Data ===")
     url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL_TWELVE}&interval={TIMEFRAME}&outputsize=200&apikey={TWELVE_DATA_API_KEY}"
     try:
         response = requests.get(url, timeout=10)
@@ -42,6 +43,7 @@ def get_data_twelve():
         df['high'] = df['high'].astype(float)
         df['low'] = df['low'].astype(float)
         df = df.iloc[::-1].reset_index(drop=True)
+        print(f"Twelve Data: تم جلب {len(df)} شمعة")
         return df
     except Exception as e:
         print(f"Twelve Data اتصال: {e}")
@@ -49,6 +51,7 @@ def get_data_twelve():
 
 # ================== جلب البيانات من Binance ==================
 def get_data_binance():
+    print("=== جاري جلب البيانات من Binance ===")
     url = f"https://api.binance.com/api/v3/klines?symbol={SYMBOL_BINANCE}&interval=15m&limit=200"
     try:
         response = requests.get(url, timeout=10)
@@ -60,6 +63,7 @@ def get_data_binance():
         df['close'] = df['close'].astype(float)
         df['high'] = df['high'].astype(float)
         df['low'] = df['low'].astype(float)
+        print(f"Binance: تم جلب {len(df)} شمعة")
         return df
     except Exception as e:
         print(f"Binance اتصال: {e}")
@@ -121,19 +125,21 @@ def send_signal(direction, entry, sl, tp, confidence):
 
 # ================== الحلقة الرئيسية ==================
 def main():
-    print("بدء تشغيل البوت...")
+    print("=== البوت بدأ العمل ===")
     last_signal_time = 0
     while True:
         try:
             df_twelve = get_data_twelve()
             df_binance = get_data_binance()
             
+            print(f"Twelve Data: {'OK' if df_twelve is not None else 'فشل'} | Binance: {'OK' if df_binance is not None else 'فشل'}")
+            
             if df_twelve is None or df_binance is None or len(df_twelve) < 50:
                 print("بيانات غير كافية، إعادة المحاولة...")
                 time.sleep(60)
                 continue
             
-            # التحقق المتقاطع: هل السعران متقاربان؟
+            # التحقق المتقاطع
             price_twelve = df_twelve['close'].iloc[-1]
             price_binance = df_binance['close'].iloc[-1]
             price_diff = abs(price_twelve - price_binance) / price_twelve * 100
@@ -167,7 +173,7 @@ def main():
                 time.sleep(900)
                 continue
             
-            # شروط الشراء (مخففة)
+            # شروط الشراء
             buy_conditions = [
                 last_close > last_ema200,
                 last_close > last_ema50,
@@ -175,7 +181,7 @@ def main():
                 last_atr > 1.0,
             ]
             
-            # شروط البيع (مخففة)
+            # شروط البيع
             sell_conditions = [
                 last_close < last_ema200,
                 last_close < last_ema50,
@@ -210,7 +216,7 @@ def main():
             else:
                 print("لا إشارة حالياً.")
             
-            time.sleep(900)  # كل 15 دقيقة
+            time.sleep(900)
         
         except Exception as e:
             print(f"حدث خطأ: {e}")
