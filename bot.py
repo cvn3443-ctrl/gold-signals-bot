@@ -23,56 +23,32 @@ TELEGRAM_TOKEN = "8993436999:AAFA3SeyZrbVlHlZ3Ffzy0dR7ZJHEsZezpg"
 TELEGRAM_CHAT_ID = "-1004300703660"
 TWELVE_DATA_API_KEY = "8542361c42e84dd68468a39366ca04a1"
 
-SYMBOL_TWELVE = "XAU/USD"
-SYMBOL_BINANCE = "XAUUSDT"
+SYMBOL = "XAU/USD"
 TIMEFRAME = "15min"
 MIN_TIME_BETWEEN_SIGNALS = 900  # 15 دقيقة
 
-# ================== جلب البيانات من Twelve Data ==================
-def get_data_twelve():
-    print("=== جاري جلب البيانات من Twelve Data ===")
-    url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL_TWELVE}&interval={TIMEFRAME}&outputsize=200&apikey={TWELVE_DATA_API_KEY}"
+# ================== جلب البيانات ==================
+def get_data():
+    print("=== جاري جلب البيانات ===")
+    url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL}&interval={TIMEFRAME}&outputsize=200&apikey={TWELVE_DATA_API_KEY}"
     for attempt in range(3):
         try:
             response = requests.get(url, timeout=30)
             data = response.json()
             if 'values' not in data:
-                print(f"Twelve Data: {data.get('message', 'خطأ')}")
+                print(f"خطأ: {data.get('message', 'خطأ غير معروف')}")
                 return None
             df = pd.DataFrame(data['values'])
             df['close'] = df['close'].astype(float)
             df['high'] = df['high'].astype(float)
             df['low'] = df['low'].astype(float)
             df = df.iloc[::-1].reset_index(drop=True)
-            print(f"Twelve Data: تم جلب {len(df)} شمعة")
+            print(f"تم جلب {len(df)} شمعة. آخر سعر: {df['close'].iloc[-1]:.2f}")
             return df
         except Exception as e:
             print(f"محاولة {attempt+1} فشلت: {e}")
             time.sleep(5)
-    print("Twelve Data: فشلت جميع المحاولات")
-    return None
-
-# ================== جلب البيانات من Binance ==================
-def get_data_binance():
-    print("=== جاري جلب البيانات من Binance ===")
-    url = f"https://api.binance.com/api/v3/klines?symbol={SYMBOL_BINANCE}&interval=15m&limit=200"
-    for attempt in range(3):
-        try:
-            response = requests.get(url, timeout=30)
-            data = response.json()
-            if not isinstance(data, list):
-                print("Binance: خطأ في البيانات")
-                return None
-            df = pd.DataFrame(data, columns=['time', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'])
-            df['close'] = df['close'].astype(float)
-            df['high'] = df['high'].astype(float)
-            df['low'] = df['low'].astype(float)
-            print(f"Binance: تم جلب {len(df)} شمعة")
-            return df
-        except Exception as e:
-            print(f"محاولة {attempt+1} فشلت: {e}")
-            time.sleep(5)
-    print("Binance: فشلت جميع المحاولات")
+    print("فشلت جميع المحاولات")
     return None
 
 # ================== المؤشرات ==================
@@ -117,7 +93,7 @@ def send_signal(direction, entry, sl, tp, confidence):
 ⏰ الوقت: {datetime.now().strftime('%H:%M')}
 📊 الفريم: {TIMEFRAME}
 🧠 نسبة الثقة: {confidence}%
-📡 المصادر: Twelve Data + Binance
+📡 المصدر: Twelve Data
 
 ⚠️ المخاطرة المقترحة: 0.5% من رأس المال
 """
@@ -125,9 +101,9 @@ def send_signal(direction, entry, sl, tp, confidence):
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
     try:
         requests.post(url, json=payload)
-        print(f"تم إرسال التوصية: {direction}")
+        print(f"✅ تم إرسال التوصية: {direction}")
     except Exception as e:
-        print(f"فشل إرسال التوصية: {e}")
+        print(f"❌ فشل إرسال التوصية: {e}")
 
 # ================== الحلقة الرئيسية ==================
 def main():
@@ -135,33 +111,20 @@ def main():
     last_signal_time = 0
     while True:
         try:
-            df_twelve = get_data_twelve()
-            df_binance = get_data_binance()
+            df = get_data()
             
-            print(f"Twelve Data: {'OK' if df_twelve is not None else 'فشل'} | Binance: {'OK' if df_binance is not None else 'فشل'}")
-            
-            if df_twelve is None or df_binance is None or len(df_twelve) < 50:
+            if df is None or len(df) < 50:
                 print("بيانات غير كافية، إعادة المحاولة بعد دقيقة...")
                 time.sleep(60)
                 continue
             
-            # التحقق المتقاطع
-            price_twelve = df_twelve['close'].iloc[-1]
-            price_binance = df_binance['close'].iloc[-1]
-            price_diff = abs(price_twelve - price_binance) / price_twelve * 100
-            
-            if price_diff > 1.0:
-                print(f"فرق كبير بين المصدرين: {price_diff:.2f}% - تجاهل الإشارة")
-                time.sleep(900)
-                continue
-            
             # حساب المؤشرات
-            ema_50 = calculate_ema(df_twelve, 50)
-            ema_200 = calculate_ema(df_twelve, 200)
-            rsi = calculate_rsi(df_twelve, 14)
-            atr = calculate_atr(df_twelve, 14)
+            ema_50 = calculate_ema(df, 50)
+            ema_200 = calculate_ema(df, 200)
+            rsi = calculate_rsi(df, 14)
+            atr = calculate_atr(df, 14)
             
-            last_close = df_twelve['close'].iloc[-1]
+            last_close = df['close'].iloc[-1]
             last_ema50 = ema_50.iloc[-1]
             last_ema200 = ema_200.iloc[-1]
             last_rsi = rsi.iloc[-1]
@@ -174,7 +137,7 @@ def main():
                 continue
             
             # فلتر الشمعة النظيفة
-            if not is_clean_candle(df_twelve):
+            if not is_clean_candle(df):
                 print("الشمعة غير نظيفة، تجاهل.")
                 time.sleep(900)
                 continue
