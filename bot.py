@@ -32,42 +32,48 @@ MIN_TIME_BETWEEN_SIGNALS = 900  # 15 دقيقة
 def get_data_twelve():
     print("=== جاري جلب البيانات من Twelve Data ===")
     url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL_TWELVE}&interval={TIMEFRAME}&outputsize=200&apikey={TWELVE_DATA_API_KEY}"
-    try:
-        response = requests.get(url, timeout=10)
-        data = response.json()
-        if 'values' not in data:
-            print(f"Twelve Data: {data.get('message', 'خطأ')}")
-            return None
-        df = pd.DataFrame(data['values'])
-        df['close'] = df['close'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
-        df = df.iloc[::-1].reset_index(drop=True)
-        print(f"Twelve Data: تم جلب {len(df)} شمعة")
-        return df
-    except Exception as e:
-        print(f"Twelve Data اتصال: {e}")
-        return None
+    for attempt in range(3):
+        try:
+            response = requests.get(url, timeout=30)
+            data = response.json()
+            if 'values' not in data:
+                print(f"Twelve Data: {data.get('message', 'خطأ')}")
+                return None
+            df = pd.DataFrame(data['values'])
+            df['close'] = df['close'].astype(float)
+            df['high'] = df['high'].astype(float)
+            df['low'] = df['low'].astype(float)
+            df = df.iloc[::-1].reset_index(drop=True)
+            print(f"Twelve Data: تم جلب {len(df)} شمعة")
+            return df
+        except Exception as e:
+            print(f"محاولة {attempt+1} فشلت: {e}")
+            time.sleep(5)
+    print("Twelve Data: فشلت جميع المحاولات")
+    return None
 
 # ================== جلب البيانات من Binance ==================
 def get_data_binance():
     print("=== جاري جلب البيانات من Binance ===")
     url = f"https://api.binance.com/api/v3/klines?symbol={SYMBOL_BINANCE}&interval=15m&limit=200"
-    try:
-        response = requests.get(url, timeout=10)
-        data = response.json()
-        if not isinstance(data, list):
-            print("Binance: خطأ في البيانات")
-            return None
-        df = pd.DataFrame(data, columns=['time', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'])
-        df['close'] = df['close'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
-        print(f"Binance: تم جلب {len(df)} شمعة")
-        return df
-    except Exception as e:
-        print(f"Binance اتصال: {e}")
-        return None
+    for attempt in range(3):
+        try:
+            response = requests.get(url, timeout=30)
+            data = response.json()
+            if not isinstance(data, list):
+                print("Binance: خطأ في البيانات")
+                return None
+            df = pd.DataFrame(data, columns=['time', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'])
+            df['close'] = df['close'].astype(float)
+            df['high'] = df['high'].astype(float)
+            df['low'] = df['low'].astype(float)
+            print(f"Binance: تم جلب {len(df)} شمعة")
+            return df
+        except Exception as e:
+            print(f"محاولة {attempt+1} فشلت: {e}")
+            time.sleep(5)
+    print("Binance: فشلت جميع المحاولات")
+    return None
 
 # ================== المؤشرات ==================
 def calculate_ema(df, period):
@@ -135,7 +141,7 @@ def main():
             print(f"Twelve Data: {'OK' if df_twelve is not None else 'فشل'} | Binance: {'OK' if df_binance is not None else 'فشل'}")
             
             if df_twelve is None or df_binance is None or len(df_twelve) < 50:
-                print("بيانات غير كافية، إعادة المحاولة...")
+                print("بيانات غير كافية، إعادة المحاولة بعد دقيقة...")
                 time.sleep(60)
                 continue
             
