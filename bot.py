@@ -21,28 +21,34 @@ def run_flask():
 # ================== الإعدادات ==================
 TELEGRAM_TOKEN = "8993436999:AAFA3SeyZrbVlHlZ3Ffzy0dR7ZJHEsZezpg"
 TELEGRAM_CHAT_ID = "-1004300703660"
-TWELVE_DATA_API_KEY = "8542361c42e84dd68468a39366ca04a1"
 
-SYMBOL = "XAU/USD"
+SYMBOL = "XAUUSD=X"
 TIMEFRAME = "15min"
 MIN_TIME_BETWEEN_SIGNALS = 900  # 15 دقيقة
 
-# ================== جلب البيانات ==================
+# ================== جلب البيانات من Yahoo Finance ==================
 def get_data():
-    print("=== جاري جلب البيانات ===")
-    url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL}&interval={TIMEFRAME}&outputsize=200&apikey={TWELVE_DATA_API_KEY}"
+    print("=== جاري جلب البيانات من Yahoo Finance ===")
+    url = "https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=15m&range=5d"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     for attempt in range(3):
         try:
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, headers=headers, timeout=15)
             data = response.json()
-            if 'values' not in data:
-                print(f"خطأ: {data.get('message', 'خطأ غير معروف')}")
-                return None
-            df = pd.DataFrame(data['values'])
-            df['close'] = df['close'].astype(float)
-            df['high'] = df['high'].astype(float)
-            df['low'] = df['low'].astype(float)
-            df = df.iloc[::-1].reset_index(drop=True)
+            result = data['chart']['result'][0]
+            timestamps = result['timestamp']
+            quotes = result['indicators']['quote'][0]
+            df = pd.DataFrame({
+                'time': timestamps,
+                'open': quotes['open'],
+                'high': quotes['high'],
+                'low': quotes['low'],
+                'close': quotes['close'],
+            })
+            df = df.dropna()
+            df = df.reset_index(drop=True)
             print(f"تم جلب {len(df)} شمعة. آخر سعر: {df['close'].iloc[-1]:.2f}")
             return df
         except Exception as e:
@@ -93,7 +99,7 @@ def send_signal(direction, entry, sl, tp, confidence):
 ⏰ الوقت: {datetime.now().strftime('%H:%M')}
 📊 الفريم: {TIMEFRAME}
 🧠 نسبة الثقة: {confidence}%
-📡 المصدر: Twelve Data
+📡 المصدر: Yahoo Finance
 
 ⚠️ المخاطرة المقترحة: 0.5% من رأس المال
 """
@@ -108,17 +114,6 @@ def send_signal(direction, entry, sl, tp, confidence):
 # ================== الحلقة الرئيسية ==================
 def main():
     print("=== البوت بدأ العمل ===")
-    
-    # اختبار الاتصال بـ Twelve Data
-    print("=== اختبار الاتصال بـ Twelve Data ===")
-    test_url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL}&interval={TIMEFRAME}&outputsize=1&apikey={TWELVE_DATA_API_KEY}"
-    try:
-        test_response = requests.get(test_url, timeout=30)
-        print(f"كود الاستجابة: {test_response.status_code}")
-        print(f"رد الاختبار: {test_response.text[:200]}")
-    except Exception as e:
-        print(f"فشل اختبار الاتصال: {e}")
-    
     last_signal_time = 0
     while True:
         try:
