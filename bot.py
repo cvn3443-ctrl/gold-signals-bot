@@ -118,6 +118,8 @@ def main():
                 time.sleep(60)
                 continue
             
+            print("=== تم جلب البيانات ===")
+            
             # حساب المؤشرات
             ema_50 = calculate_ema(df, 50)
             ema_200 = calculate_ema(df, 200)
@@ -129,6 +131,8 @@ def main():
             last_ema200 = ema_200.iloc[-1]
             last_rsi = rsi.iloc[-1]
             last_atr = atr.iloc[-1]
+            
+            print(f"=== المؤشرات: السعر={last_close:.2f}, RSI={last_rsi:.2f}, ATR={last_atr:.2f} ===")
             
             # فلتر ATR
             if last_atr < 1.0:
@@ -161,8 +165,7 @@ def main():
             buy_score = sum(buy_conditions)
             sell_score = sum(sell_conditions)
             
-            # طباعة تشخيصية
-            print(f"السعر: {last_close:.2f} | RSI: {last_rsi:.2f} | ATR: {last_atr:.2f} | شراء: {buy_score}/4 | بيع: {sell_score}/4")
+            print(f"=== النقاط: شراء={buy_score}/4, بيع={sell_score}/4 ===")
             
             current_time = time.time()
             time_since_last = current_time - last_signal_time
