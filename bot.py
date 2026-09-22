@@ -108,6 +108,17 @@ def send_signal(direction, entry, sl, tp, confidence):
 # ================== الحلقة الرئيسية ==================
 def main():
     print("=== البوت بدأ العمل ===")
+    
+    # اختبار الاتصال بـ Twelve Data
+    print("=== اختبار الاتصال بـ Twelve Data ===")
+    test_url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL}&interval={TIMEFRAME}&outputsize=1&apikey={TWELVE_DATA_API_KEY}"
+    try:
+        test_response = requests.get(test_url, timeout=30)
+        print(f"كود الاستجابة: {test_response.status_code}")
+        print(f"رد الاختبار: {test_response.text[:200]}")
+    except Exception as e:
+        print(f"فشل اختبار الاتصال: {e}")
+    
     last_signal_time = 0
     while True:
         try:
