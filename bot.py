@@ -2,6 +2,18 @@ import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import logging
+import sys
+
+# ================== إعداد logging ==================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger()
 
 # ================== الإعدادات ==================
 TELEGRAM_TOKEN = "8993436999:AAFA3SeyZrbVlHlZ3Ffzy0dR7ZJHEsZezpg"
@@ -13,13 +25,13 @@ TIMEFRAME = "15min"
 
 # ================== جلب البيانات ==================
 def get_data():
-    print("=== جاري جلب البيانات ===")
+    logger.info("=== جاري جلب البيانات ===")
     url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL}&interval={TIMEFRAME}&outputsize=200&apikey={TWELVE_DATA_API_KEY}"
     try:
         response = requests.get(url, timeout=30)
         data = response.json()
         if 'values' not in data:
-            print(f"خطأ: {data.get('message', 'خطأ غير معروف')}")
+            logger.error(f"خطأ: {data.get('message', 'خطأ غير معروف')}")
             return None
         df = pd.DataFrame(data['values'])
         df['close'] = df['close'].astype(float)
@@ -27,10 +39,10 @@ def get_data():
         df['low'] = df['low'].astype(float)
         df['open'] = df['open'].astype(float)
         df = df.iloc[::-1].reset_index(drop=True)
-        print(f"تم جلب {len(df)} شمعة. آخر سعر: {df['close'].iloc[-1]:.2f}")
+        logger.info(f"تم جلب {len(df)} شمعة. آخر سعر: {df['close'].iloc[-1]:.2f}")
         return df
     except Exception as e:
-        print(f"فشل جلب البيانات: {e}")
+        logger.error(f"فشل جلب البيانات: {e}")
         return None
 
 # ================== المؤشرات ==================
@@ -80,69 +92,77 @@ def send_signal(direction, entry, sl, tp, confidence):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
     try:
-        requests.post(url, json=payload)
-        print(f"✅ تم إرسال التوصية: {direction}")
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            logger.info(f"✅ تم إرسال التوصية: {direction}")
+        else:
+            logger.error(f"❌ فشل إرسال التوصية: {response.text}")
     except Exception as e:
-        print(f"❌ فشل إرسال التوصية: {e}")
+        logger.error(f"❌ فشل إرسال التوصية: {e}")
 
 # ================== التشغيل ==================
-print("=== البوت بدأ العمل ===")
-df = get_data()
-if df is None or len(df) < 50:
-    print("بيانات غير كافية.")
-    exit()
+def main():
+    logger.info("=== البوت بدأ العمل ===")
+    
+    df = get_data()
+    if df is None or len(df) < 50:
+        logger.warning("بيانات غير كافية.")
+        return
+    
+    ema_50 = calculate_ema(df, 50)
+    ema_200 = calculate_ema(df, 200)
+    rsi = calculate_rsi(df, 14)
+    atr = calculate_atr(df, 14)
+    
+    last_close = df['close'].iloc[-1]
+    last_ema50 = ema_50.iloc[-1]
+    last_ema200 = ema_200.iloc[-1]
+    last_rsi = rsi.iloc[-1]
+    last_atr = atr.iloc[-1]
+    
+    logger.info(f"السعر: {last_close:.2f} | RSI: {last_rsi:.2f} | ATR: {last_atr:.2f}")
+    
+    if last_atr < 1.0:
+        logger.info("ATR صغير جداً، تجاهل.")
+        return
+    
+    if not is_clean_candle(df):
+        logger.info("الشمعة غير نظيفة، تجاهل.")
+        return
+    
+    buy_conditions = [
+        last_close > last_ema200,
+        last_close > last_ema50,
+        30 < last_rsi < 70,
+        last_atr > 1.0,
+    ]
+    
+    sell_conditions = [
+        last_close < last_ema200,
+        last_close < last_ema50,
+        30 < last_rsi < 70,
+        last_atr > 1.0,
+    ]
+    
+    buy_score = sum(buy_conditions)
+    sell_score = sum(sell_conditions)
+    
+    logger.info(f"نقاط الشراء: {buy_score}/4 | نقاط البيع: {sell_score}/4")
+    
+    if buy_score >= 2:
+        confidence = int((buy_score / 4) * 100)
+        entry = round(last_close, 2)
+        sl = round(entry - (last_atr * 1.5), 2)
+        tp = round(entry + (last_atr * 3), 2)
+        send_signal("شراء (BUY)", entry, sl, tp, confidence)
+    elif sell_score >= 2:
+        confidence = int((sell_score / 4) * 100)
+        entry = round(last_close, 2)
+        sl = round(entry + (last_atr * 1.5), 2)
+        tp = round(entry - (last_atr * 3), 2)
+        send_signal("بيع (SELL)", entry, sl, tp, confidence)
+    else:
+        logger.info("لا إشارة حالياً.")
 
-ema_50 = calculate_ema(df, 50)
-ema_200 = calculate_ema(df, 200)
-rsi = calculate_rsi(df, 14)
-atr = calculate_atr(df, 14)
-
-last_close = df['close'].iloc[-1]
-last_ema50 = ema_50.iloc[-1]
-last_ema200 = ema_200.iloc[-1]
-last_rsi = rsi.iloc[-1]
-last_atr = atr.iloc[-1]
-
-print(f"السعر: {last_close:.2f} | RSI: {last_rsi:.2f} | ATR: {last_atr:.2f}")
-
-if last_atr < 1.0:
-    print("ATR صغير جداً، تجاهل.")
-    exit()
-
-if not is_clean_candle(df):
-    print("الشمعة غير نظيفة، تجاهل.")
-    exit()
-
-buy_conditions = [
-    last_close > last_ema200,
-    last_close > last_ema50,
-    30 < last_rsi < 70,
-    last_atr > 1.0,
-]
-
-sell_conditions = [
-    last_close < last_ema200,
-    last_close < last_ema50,
-    30 < last_rsi < 70,
-    last_atr > 1.0,
-]
-
-buy_score = sum(buy_conditions)
-sell_score = sum(sell_conditions)
-
-print(f"نقاط الشراء: {buy_score}/4 | نقاط البيع: {sell_score}/4")
-
-if buy_score >= 2:
-    confidence = int((buy_score / 4) * 100)
-    entry = round(last_close, 2)
-    sl = round(entry - (last_atr * 1.5), 2)
-    tp = round(entry + (last_atr * 3), 2)
-    send_signal("شراء (BUY)", entry, sl, tp, confidence)
-elif sell_score >= 2:
-    confidence = int((sell_score / 4) * 100)
-    entry = round(last_close, 2)
-    sl = round(entry + (last_atr * 1.5), 2)
-    tp = round(entry - (last_atr * 3), 2)
-    send_signal("بيع (SELL)", entry, sl, tp, confidence)
-else:
-    print("لا إشارة حالياً.")
+if __name__ == "__main__":
+    main()
