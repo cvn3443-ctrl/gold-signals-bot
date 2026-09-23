@@ -85,68 +85,64 @@ def send_signal(direction, entry, sl, tp, confidence):
     except Exception as e:
         print(f"❌ فشل إرسال التوصية: {e}")
 
-# ================== التشغيل (مرة واحدة) ==================
-def main():
-    print("=== البوت بدأ العمل ===")
-    df = get_data()
-    if df is None or len(df) < 50:
-        print("بيانات غير كافية.")
-        return
-    
-    ema_50 = calculate_ema(df, 50)
-    ema_200 = calculate_ema(df, 200)
-    rsi = calculate_rsi(df, 14)
-    atr = calculate_atr(df, 14)
-    
-    last_close = df['close'].iloc[-1]
-    last_ema50 = ema_50.iloc[-1]
-    last_ema200 = ema_200.iloc[-1]
-    last_rsi = rsi.iloc[-1]
-    last_atr = atr.iloc[-1]
-    
-    print(f"السعر: {last_close:.2f} | RSI: {last_rsi:.2f} | ATR: {last_atr:.2f}")
-    
-    if last_atr < 1.0:
-        print("ATR صغير جداً، تجاهل.")
-        return
-    
-    if not is_clean_candle(df):
-        print("الشمعة غير نظيفة، تجاهل.")
-        return
-    
-    buy_conditions = [
-        last_close > last_ema200,
-        last_close > last_ema50,
-        30 < last_rsi < 70,
-        last_atr > 1.0,
-    ]
-    
-    sell_conditions = [
-        last_close < last_ema200,
-        last_close < last_ema50,
-        30 < last_rsi < 70,
-        last_atr > 1.0,
-    ]
-    
-    buy_score = sum(buy_conditions)
-    sell_score = sum(sell_conditions)
-    
-    print(f"نقاط الشراء: {buy_score}/4 | نقاط البيع: {sell_score}/4")
-    
-    if buy_score >= 2:
-        confidence = int((buy_score / 4) * 100)
-        entry = round(last_close, 2)
-        sl = round(entry - (last_atr * 1.5), 2)
-        tp = round(entry + (last_atr * 3), 2)
-        send_signal("شراء (BUY)", entry, sl, tp, confidence)
-    elif sell_score >= 2:
-        confidence = int((sell_score / 4) * 100)
-        entry = round(last_close, 2)
-        sl = round(entry + (last_atr * 1.5), 2)
-        tp = round(entry - (last_atr * 3), 2)
-        send_signal("بيع (SELL)", entry, sl, tp, confidence)
-    else:
-        print("لا إشارة حالياً.")
+# ================== التشغيل ==================
+print("=== البوت بدأ العمل ===")
+df = get_data()
+if df is None or len(df) < 50:
+    print("بيانات غير كافية.")
+    exit()
 
-if __name__ == "__main__":
-    main()
+ema_50 = calculate_ema(df, 50)
+ema_200 = calculate_ema(df, 200)
+rsi = calculate_rsi(df, 14)
+atr = calculate_atr(df, 14)
+
+last_close = df['close'].iloc[-1]
+last_ema50 = ema_50.iloc[-1]
+last_ema200 = ema_200.iloc[-1]
+last_rsi = rsi.iloc[-1]
+last_atr = atr.iloc[-1]
+
+print(f"السعر: {last_close:.2f} | RSI: {last_rsi:.2f} | ATR: {last_atr:.2f}")
+
+if last_atr < 1.0:
+    print("ATR صغير جداً، تجاهل.")
+    exit()
+
+if not is_clean_candle(df):
+    print("الشمعة غير نظيفة، تجاهل.")
+    exit()
+
+buy_conditions = [
+    last_close > last_ema200,
+    last_close > last_ema50,
+    30 < last_rsi < 70,
+    last_atr > 1.0,
+]
+
+sell_conditions = [
+    last_close < last_ema200,
+    last_close < last_ema50,
+    30 < last_rsi < 70,
+    last_atr > 1.0,
+]
+
+buy_score = sum(buy_conditions)
+sell_score = sum(sell_conditions)
+
+print(f"نقاط الشراء: {buy_score}/4 | نقاط البيع: {sell_score}/4")
+
+if buy_score >= 2:
+    confidence = int((buy_score / 4) * 100)
+    entry = round(last_close, 2)
+    sl = round(entry - (last_atr * 1.5), 2)
+    tp = round(entry + (last_atr * 3), 2)
+    send_signal("شراء (BUY)", entry, sl, tp, confidence)
+elif sell_score >= 2:
+    confidence = int((sell_score / 4) * 100)
+    entry = round(last_close, 2)
+    sl = round(entry + (last_atr * 1.5), 2)
+    tp = round(entry - (last_atr * 3), 2)
+    send_signal("بيع (SELL)", entry, sl, tp, confidence)
+else:
+    print("لا إشارة حالياً.")
